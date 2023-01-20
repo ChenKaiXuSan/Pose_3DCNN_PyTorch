@@ -7,10 +7,10 @@ import time
 import subprocess
 from argparse import ArgumentParser
 
-VIDEO_LENGTH = ['1', '2', '3']
-VIDEO_FRAME = ['8', '16', '32']
+VIDEO_LENGTH = ['1']
+VIDEO_FRAME = ['10', '30']
 
-MAIN_FILE_PATH = '/workspace/Walk_Video_PyTorch/project/main.py'
+MAIN_FILE_PATH = '/workspace/Pose_3DCNN_PyTorch/project/main.py'
 
 def get_parameters():
     '''
@@ -24,6 +24,7 @@ def get_parameters():
 
     # Training setting
     parser.add_argument('--gpu_num', type=int, default=0, choices=[0, 1], help='the gpu number whicht to train')
+    parser.add_argument('--part', type=str, default='all', choices=['all', 'body', 'head', 'upper', 'lower'], help='which part to used.')
 
     # Transfor_learning
     parser.add_argument('--transfor_learning', action='store_true', help='if use the transformer learning')
@@ -44,8 +45,7 @@ if __name__ == '__main__':
     transfor_learning = config.transfor_learning
     pre_process_flag = config.pre_process_flag
     model = config.model
-
-
+    part = config.part
 
     symbol = '_'
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
                 if not pre_process_flag:
 
                     version = symbol.join([data, length, frames, 'not_pre_process'])
-                    log_path = '/workspace/Walk_Video_PyTorch/logs/' + symbol.join([version, model]) + '.log'
+                    log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                     with open(log_path, 'w') as f:
 
@@ -69,6 +69,7 @@ if __name__ == '__main__':
                                         '--model', model,
                                         '--clip_duration', length,
                                         '--uniform_temporal_subsample_num', frames,
+                                        '--part', part,
                                         '--gpu_num', str(config.gpu_num),
                                         # '--pre_process_flag',
                                         '--transfor_learning',
@@ -77,7 +78,7 @@ if __name__ == '__main__':
                 else:
 
                     version = symbol.join([data, length, frames])
-                    log_path = '/workspace/Walk_Video_PyTorch/logs/' + symbol.join([version, model]) + '.log'
+                    log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                     with open(log_path, 'w') as f:
 
@@ -87,6 +88,7 @@ if __name__ == '__main__':
                                         '--model', model,
                                         '--clip_duration', length,
                                         '--uniform_temporal_subsample_num', frames,
+                                        '--part', part,
                                         '--gpu_num', str(config.gpu_num),
                                         '--pre_process_flag',
                                         '--transfor_learning',
@@ -95,7 +97,7 @@ if __name__ == '__main__':
             else:
 
                 version = symbol.join([data, length, frames, 'not_transfor_learning'])
-                log_path = '/workspace/Walk_Video_PyTorch/logs/' + symbol.join([version, model]) + '.log'
+                log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                 with open(log_path, 'w') as f:
 
@@ -105,6 +107,7 @@ if __name__ == '__main__':
                                     '--model', model,
                                     '--clip_duration', length,
                                     '--uniform_temporal_subsample_num', frames,
+                                    '--part', part,
                                     '--gpu_num', str(config.gpu_num),
                                     '--pre_process_flag',
                                     '--max_epochs', '100'

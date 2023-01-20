@@ -25,6 +25,7 @@ from pytorchvideo.transforms import (
 
 from typing import Any, Callable, Dict, Optional, Type
 from pytorch_lightning import LightningDataModule
+from pytorch_lightning.trainer.supporters import CombinedLoader
 import os
 
 import torch
@@ -34,17 +35,23 @@ from pytorchvideo.data import make_clip_sampler
 
 from pytorchvideo.data.labeled_video_dataset import LabeledVideoDataset, labeled_video_dataset
 
+# different part of person 
+PART = ['body', 'head',]
+
 # %%
 
 def WalkDataset(
     data_path: str,
-    clip_sampler: ClipSampler,
-    video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler,
+    flag: str,
+    part: str,
+    clip_duration: int,
+    # clip_sampler: ClipSampler,
+    # video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler,
     transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
     video_path_prefix: str = "",
     decode_audio: bool = False,
     decoder: str = "pyav",
-) -> LabeledVideoDataset:
+) -> list:
     '''
     A helper function to create "LabeledVideoDataset" object for the Walk dataset.
 
@@ -61,16 +68,48 @@ def WalkDataset(
     Returns:
         LabeledVideoDataset: _description_
     '''
-    return labeled_video_dataset(
-        data_path,
-        clip_sampler,
-        video_sampler,
-        transform,
-        video_path_prefix,
-        decode_audio,
-        decoder
-    )
+    torch.manual_seed(0)
+    labeled_video_list = []
 
+    if part == 'all':
+        for part in PART:
+            PATH = os.path.join(data_path, part, flag)
+
+            print("#" * 50)
+            print("load path:", PATH)
+            print("#" * 50)
+
+            labeled_video_list.append(
+                labeled_video_dataset(
+                PATH,
+                clip_sampler=make_clip_sampler("uniform", clip_duration),
+                video_sampler=torch.utils.data.RandomSampler,
+                transform=transform,
+                video_path_prefix=video_path_prefix,
+                decode_audio=decode_audio,
+                decoder=decoder
+            )
+            )
+    else:
+        PATH = os.path.join(data_path, part, flag)
+
+        print("#" * 50)
+        print("load path:", PATH)
+        print("#" * 50)
+
+        labeled_video_list.append(
+                labeled_video_dataset(
+                PATH,
+                clip_sampler=make_clip_sampler('random', clip_duration),
+                video_sampler=torch.utils.data.RandomSampler,
+                transform=transform,
+                video_path_prefix=video_path_prefix,
+                decode_audio=decode_audio,
+                decoder=decoder
+            )
+            )
+
+    return labeled_video_list
 
 # %%
 
@@ -87,6 +126,8 @@ class WalkDataModule(LightningDataModule):
         self._NUM_WORKERS = opt.num_workers
         self._IMG_SIZE = opt.img_size
 
+        self._PART = opt.part
+
         # frame rate
         self._CLIP_DURATION = opt.clip_duration
         self.uniform_temporal_subsample_num = opt.uniform_temporal_subsample_num
@@ -101,8 +142,8 @@ class WalkDataModule(LightningDataModule):
                             UniformTemporalSubsample(self.uniform_temporal_subsample_num),
                             
                             # dived the pixel from [0, 255] tp [0, 1], to save computing resources.
-                            # Div255(),
-                            # Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
+                            Div255(),
+                            Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
 
                             # RandomShortSideScale(min_size=256, max_size=320),
                             # RandomCrop(self._IMG_SIZE),
@@ -110,7 +151,7 @@ class WalkDataModule(LightningDataModule):
                             # ShortSideScale(self._IMG_SIZE),
 
                             Resize(size=[self._IMG_SIZE, self._IMG_SIZE]),
-                            RandomHorizontalFlip(p=0.5),
+                            # RandomHorizontalFlip(p=0.5),
                         ]
                     ),
                 ),
@@ -141,6 +182,32 @@ class WalkDataModule(LightningDataModule):
         )
 
     def prepare_data(self) -> None:
+        # used for download dataset
+        # if self._PRE_PROCESS_FLAG:
+        #     data_path = self._TRAIN_PATH
+        #     transform = self.train_transform
+        #     print("#" * 50)
+        #     print("run pre process model!")
+        #     print("#" * 50)
+
+        # else:
+        #     data_path = self._TRAIN_PATH
+        #     transform = self.raw_train_transform
+        #     print("#" * 50)
+        #     print("run not pre process model!")
+        #     print("#" * 50)
+
+        # self.train_dataset = WalkDataset(
+        #         data_path=data_path, flag='train', part=self._PART,
+        #         clip_duration=self._CLIP_DURATION,
+        #         transform=transform,
+        #     )
+
+        # self.val_dataset = WalkDataset(
+        #     data_path=data_path, flag='val', part=self._PART,
+        #     clip_duration=self._CLIP_DURATION,
+        #     transform=transform,
+        # )
         pass
 
     def setup(self, stage: Optional[str] = None) -> None:
@@ -154,62 +221,91 @@ class WalkDataModule(LightningDataModule):
             data_path = self._TRAIN_PATH
             transform = self.train_transform
             print("#" * 50)
-            print("run pre process model!", data_path)
+            print("run pre process model!")
             print("#" * 50)
 
         else:
             data_path = self._TRAIN_PATH
             transform = self.raw_train_transform
             print("#" * 50)
-            print("run not pre process model!", data_path)
+            print("run not pre process model!")
             print("#" * 50)
 
         # if stage == "fit" or stage == None:
         if stage in ("fit", None):
             self.train_dataset = WalkDataset(
-                data_path=os.path.join(data_path, "train"),
-                clip_sampler=make_clip_sampler("random", self._CLIP_DURATION),
+                data_path=data_path, flag='train', part=self._PART,
+                clip_duration=self._CLIP_DURATION,
                 transform=transform,
             )
 
         if stage in ("fit", "validate", None):
             self.val_dataset = WalkDataset(
-                data_path=os.path.join(data_path, "val"),
-                clip_sampler=make_clip_sampler("random", self._CLIP_DURATION),
+                data_path=data_path, flag='val', part=self._PART,
+                clip_duration=self._CLIP_DURATION,
                 transform=transform,
             )
 
         if stage in ("predict", "test", None):
             self.test_pred_dataset = WalkDataset(
-                data_path=os.path.join(data_path, "val"),
-                clip_sampler=make_clip_sampler("random", self._CLIP_DURATION),
+                data_path=data_path, flag='val', part=self._PART,
+                clip_duration=self._CLIP_DURATION,
                 transform=transform
             )
 
-    def train_dataloader(self) -> DataLoader:
+    def train_dataloader(self) -> dict:
         '''
         create the Walk train partition from the list of video labels
         in directory and subdirectory. Add transform that subsamples and
         normalizes the video before applying the scale, crop and flip augmentations.
         '''
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self._BATCH_SIZE,
-            num_workers=self._NUM_WORKERS,
-        )
+        
+        pose_Dict = {}
 
-    def val_dataloader(self) -> DataLoader:
+        if self._PART != 'all':
+            _PART = [self._PART]
+        else:
+            _PART = PART
+
+        for i, p in enumerate(_PART):
+            pose_Dict[p] = DataLoader(
+                self.train_dataset[i],
+                batch_size=self._BATCH_SIZE,
+                num_workers=self._NUM_WORKERS,
+                pin_memory=True,
+                drop_last=True,
+            )
+
+        combined_loaders = CombinedLoader(pose_Dict, mode='min_size')
+
+        return combined_loaders
+
+    def val_dataloader(self) -> dict:
         '''
         create the Walk train partition from the list of video labels
         in directory and subdirectory. Add transform that subsamples and
         normalizes the video before applying the scale, crop and flip augmentations.
         '''
 
-        return DataLoader(
-            self.val_dataset,
+        pose_Dict = {}
+
+        if self._PART != 'all':
+            _PART = [self._PART]
+        else:
+            _PART = PART
+
+        for i, p in enumerate(_PART):
+            pose_Dict[p] = DataLoader(
+            self.val_dataset[i],
             batch_size=self._BATCH_SIZE,
             num_workers=self._NUM_WORKERS,
-        )
+            pin_memory=True,
+            drop_last=True
+        )   
+
+        combined_loaders = CombinedLoader(pose_Dict, mode='min_size')
+
+        return combined_loaders
 
     def test_dataloader(self) -> DataLoader:
         '''

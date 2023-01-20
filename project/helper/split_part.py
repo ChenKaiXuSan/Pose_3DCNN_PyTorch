@@ -1,5 +1,4 @@
 # %%
-import math
 import warnings
 
 import cv2
@@ -9,7 +8,7 @@ import numpy as np
 import torch
 from torchvision.io import read_image, read_video, write_video
 from torchvision.utils import save_image
-from torchvision.transforms.functional import crop, resize
+from torchvision.transforms.functional import crop, resize, pad
 
 # %%
 
@@ -108,7 +107,8 @@ class BatchSplit():
     def split_upper_part(
         self,
         image: torch.Tensor,
-        keypoint
+        keypoint,
+        bias=60
     ):
 
         width, height, c = image.shape
@@ -128,14 +128,20 @@ class BatchSplit():
         )
         body_height = abs(hip_center_point[1] - shoulder_center_point[1]) * height
 
-        body_img = crop(image.permute(2, 0, 1),
-                        top=int(shoulder_center_point[1] * height),
-                        left=int(shoulder_center_point[0] * width - 20),
-                        height=int(body_height), width=int(body_height))
-        body_img = resize(body_img, [self.img_size, self.img_size])
+        if body_height > 1:
 
+            body_img = crop(image.permute(2, 0, 1),
+                            top=int(shoulder_center_point[1] * height),
+                            left=int(shoulder_center_point[0] * width - bias),
+                            height=int(body_height+bias), width=int(body_height+bias))
 
-        return body_img
+            # pad_body_img = pad(body_img, padding=(0, int(bias/2)), fill=0)
+
+            body_img = resize(body_img, [self.img_size, self.img_size])
+
+            save_image(body_img/255, fp='body.png')
+
+            return body_img
 
     def split_lower_part(
         self, 
@@ -154,22 +160,64 @@ class BatchSplit():
 
         lower_height = abs(1 - hip_center_point[1]) * height
 
-        lower_img = crop(image.permute(2, 0, 1),
-                        top=int(hip_center_point[1] * height),
-                        left=int(hip_center_point[0] * width - 60),
-                        height=int(lower_height), width=int(lower_height))
-        lower_img = resize(lower_img, [self.img_size, self.img_size])
+        if lower_height > 1:
+                
+            lower_img = crop(image.permute(2, 0, 1),
+                            top=int(hip_center_point[1] * height),
+                            left=int(hip_center_point[0] * width - 60),
+                            height=int(lower_height), width=int(lower_height))
+            lower_img = resize(lower_img, [self.img_size, self.img_size])
 
-        save_image(lower_img/255, fp='head.png')
+            return lower_img
 
-        return lower_img
+    def check_list(self, index):
+        '''
+        check list, to make the size be same
+
+        Args:
+            index (int): need operate  index, used in different list.
+        '''        
+        
+        self.masked_list.pop(index)
+        self.head_list.pop(index)
+        self.upper_list.pop(index)
+        self.lower_list.pop(index)
+        
+        # avoid out of list err.
+        if len(self.masked_list) <= index:
+            index -= 1
+
+        self.masked_list.append(self.masked_list[index])
+        self.head_list.append(self.head_list[index])
+        self.upper_list.append(self.upper_list[index])
+        self.lower_list.append(self.lower_list[index])
+
+    def check_T(self):
+        '''
+        check T dimension, to make sure differnt batch have same T.
+        if not, copy the last frame.
+        '''        
+        while True:
+            if len(self.masked_list) != self.unifrom_temporal_subsample_num \
+                and len(self.head_list) != self.unifrom_temporal_subsample_num \
+                and len(self.upper_list) != self.unifrom_temporal_subsample_num \
+                and len(self.lower_list) != self.unifrom_temporal_subsample_num:
+
+                self.masked_list.append(self.masked_list[-1])
+                self.head_list.append(self.head_list[-1])
+                self.upper_list.append(self.upper_list[-1])
+                self.lower_list.append(self.lower_list[-1])
+            else:
+                break
+
 
     def handle_batch_video(self, batch):
         
         video = batch['video']
+        label = batch['label']
         video_name = batch['video_name']
 
-        B, c, T, h, w = video.size()
+        B, C, T, H, W = video.size()
 
         # store the batch infor, to return.
         batch_head_list = []
@@ -178,50 +226,72 @@ class BatchSplit():
         batch_masked_raw_list = []
 
         for b in range(B):
-            batch_video = video[b]
+            
+            #################
+            # start one batch 
+            #################
 
-            keypoints_list = []
-            masked_list = []
-            head_list = []
-            upper_list = []
-            lower_list = []
+            batch_video = video[b]
+            
+            # init list for every batch
+            self.keypoints_list = []
+            self.masked_list = []
+            self.head_list = []
+            self.upper_list = []
+            self.lower_list = []
 
             for i in range(T):
 
-                masked_image, keypoints = self.mask_pose(batch_video[:, i,:])
+                masked_image, keypoints = self.mask_pose(batch_video[:, i,:]) # c, t, h, w
 
                 if masked_image is not None and keypoints is not None:
-                    keypoints_list.append(keypoints)  # 1, 17, 3
-                    masked_list.append(masked_image)
+                    self.keypoints_list.append(keypoints)  # 1, 17, 3
+                    self.masked_list.append(masked_image)
 
-            if masked_list is None:
-                # if not pred, drop all batch.
+            if len(self.masked_list) == 0:
+                # if not preds, drop all batch.
+                # to match the label, remove the droped batch label.
+                label = torch.cat([label[:b], label[b+1:]])
                 continue
             else:
 
-                for m, k in zip(masked_list, keypoints_list):
-                    head_list.append(self.split_head_part(m, k))
-                    upper_list.append(self.split_upper_part(m, k))
-                    lower_list.append(self.split_lower_part(m, k))
+                for m, k in zip(self.masked_list, self.keypoints_list):
+                    self.head_list.append(self.split_head_part(m, k))
+                    self.upper_list.append(self.split_upper_part(m, k))
+                    self.lower_list.append(self.split_lower_part(m, k))
 
-                # when not kpt pred, not drop frame but copy the last frame.
+                # when not kpt pred but masked list have some frame, not drop batch but copy the last frame.
                 while True:
-                    if len(masked_list) != self.unifrom_temporal_subsample_num:
-                        masked_list.append(masked_list[-1])
-                        head_list.append(head_list[-1])
-                        upper_list.append(upper_list[-1])
-                        lower_list.append(lower_list[-1])
+                    if None in self.head_list:
+                        index = self.head_list.index(None)
+
+                        self.check_list(index)
+
+                    elif None in self.upper_list:
+                        index = self.upper_list.index(None)
+
+                        self.check_list(index)
+
+                    elif None in self.lower_list:
+                        index = self.lower_list.index(None)
+
+                        self.check_list(index)
+
                     else: 
+                        # check if lost frame
+                        self.check_T()
                         break;
 
-                batch_head_list.append(torch.stack(head_list, dim=1)) # c, t, h, w
-                batch_upper_list.append(torch.stack(upper_list, dim=1)) 
-                batch_lower_list.append(torch.stack(lower_list, dim=1))
-                batch_masked_raw_list.append(torch.stack(masked_list, dim=0).permute(3, 0, 1, 2)) # t, h, w, c to c, t, h, w
+                batch_head_list.append(torch.stack(self.head_list, dim=1)) # c, t, h, w
+                batch_upper_list.append(torch.stack(self.upper_list, dim=1)) 
+                batch_lower_list.append(torch.stack(self.lower_list, dim=1))
+                batch_masked_raw_list.append(torch.stack(self.masked_list, dim=0).permute(3, 0, 1, 2)) # t, h, w, c to c, t, h, w
 
+        # head, upper, lower, masked_raw, label
         return torch.stack(batch_head_list, dim=0).cuda(), \
             torch.stack(batch_upper_list, dim=0).cuda(), \
             torch.stack(batch_lower_list, dim=0).cuda(), \
-            torch.stack(batch_masked_raw_list, dim=0).cuda()
+            torch.stack(batch_masked_raw_list, dim=0).cuda(), \
+            label
 
 

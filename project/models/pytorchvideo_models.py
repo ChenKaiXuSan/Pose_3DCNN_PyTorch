@@ -1,4 +1,6 @@
 # %%
+import os 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,7 +8,6 @@ import numpy as np
 from pytorch_lightning import LightningModule
 
 from make_model import MakeVideoModule
-from helper.split_part import BatchSplit
 from utils.metrics import *
 
 # for metrics
@@ -31,7 +32,11 @@ class WalkVideoClassificationLightningModule(LightningModule):
 
         self.lr=hparams.lr
         self.num_class = hparams.model_class_num
+        # frame rate 
         self.uniform_temporal_subsample_num = hparams.uniform_temporal_subsample_num
+
+        # body part 
+        self.part = hparams.part
 
         self.model = MakeVideoModule(hparams)
 
@@ -87,24 +92,27 @@ class WalkVideoClassificationLightningModule(LightningModule):
         Returns:
             loss: the calc loss
         '''
+
+        batch_part_video_Dict = {}
+        batch_part_label_Dict = {}
+
+        # for part in batch.keys():
+        #     for b in range(batch[part]['video'].size()[0]):
+        #         write_video('test/train/' +str(b)+part+batch[part]['video_name'][b], batch[part]['video'][b].permute(1, 2, 3, 0).cpu(), fps=30)
         
         # input and label
-        video = batch['video'].detach()
+        for part in batch.keys():
+            batch_part_video_Dict[part] = batch[part]['video'].detach()
+            batch_part_label_Dict[part] = batch[part]['label'].detach()
 
-        label = batch['label'].detach() # b, class_num
-
-        # split different part 
-        body_keypoints = BatchSplit(self.img_size, self.uniform_temporal_subsample_num)
-        head, upper, lower, raw = body_keypoints.handle_batch_video(batch) # b, c, t, h, w
-
-        # for test, save one batch
-        write_video('%s_head_pard.mp4' % batch_idx, video_array=head[1].cpu().permute(1, 2, 3, 0), fps=30)
-        write_video('%s_upper_pard.mp4' % batch_idx, video_array=upper[1].cpu().permute(1, 2, 3, 0), fps=30)
-        write_video('%s_lower_pard.mp4' % batch_idx, video_array=lower[1].cpu().permute(1, 2, 3, 0), fps=30)
-        # write_video('raw_pard.mp4', video_array=raw[1].cpu().permute(1, 2, 3, 0), fps=30)
-
+        # fake code
+        # batch_part_video_Dict['body'] = batch[0]['video'].detach()
+        # batch_part_label_Dict['body'] = batch[0]['label'].detach()
+        # todo all code need write
+        if self.part == 'all':
+            self.part = 'body'
         # classification task
-        y_hat = self.model(video)
+        y_hat = self.model(batch_part_video_Dict[self.part])
 
         # when torch.size([1]), not squeeze.
         if y_hat.size()[0] != 1 or len(y_hat.size()) != 1 :
@@ -115,11 +123,11 @@ class WalkVideoClassificationLightningModule(LightningModule):
         else:
             y_hat_sigmoid = torch.sigmoid(y_hat)
 
-        loss = F.binary_cross_entropy_with_logits(y_hat, label.float())
+        loss = F.binary_cross_entropy_with_logits(y_hat, batch_part_label_Dict[self.part].float())
         # soft_margin_loss = F.soft_margin_loss(y_hat_sigmoid, label.float())
 
-        accuracy = self._accuracy(y_hat_sigmoid, label)
-        precision = self._precision(y_hat_sigmoid, label)
+        accuracy = self._accuracy(y_hat_sigmoid, batch_part_label_Dict[self.part])
+        precision = self._precision(y_hat_sigmoid, batch_part_label_Dict[self.part])
 
         self.log_dict({'train_loss': loss, 'train_acc': accuracy, 'train_precision': precision})
 
@@ -147,30 +155,27 @@ class WalkVideoClassificationLightningModule(LightningModule):
 
         Returns:
             loss: the calc loss 
-            accuract: selected accuracy result.
+            accuracy: selected accuracy result.
         '''
+        batch_part_video_Dict = {}
+        batch_part_label_Dict = {}
 
-        # input and label
-        video = batch['video'].detach() # b, c, t, h, w
+        # todo 能成功load进来多个数据集，但是不能shuffle。
+        # todo 应该找个方法，尝试一下看看能不能shuffle数据集
+        if self.part == 'all':
+            self.part = 'body'
+        # for part in batch.keys():
+        #     for b in range(batch[part]['video'].size()[0]):
+        #         write_video('test/val/' +str(b)+part+batch[part]['video_name'][b], batch[part]['video'][b].permute(1, 2, 3, 0).cpu(), fps=30)
 
-        label = batch['label'].detach() # b, class_num
-
-        # split different part 
-        body_keypoints = BatchSplit(self.img_size)
-        head, upper, lower, raw = body_keypoints.handle_batch_video(batch) # b, c, t, h, w
-
-        # for test, save one batch
-        # write_video('head_pard.mp4', video_array=head[1].cpu().permute(1, 2, 3, 0), fps=30)
-        # write_video('upper_pard.mp4', video_array=upper[1].cpu().permute(1, 2, 3, 0), fps=30)
-        # write_video('lower_pard.mp4', video_array=lower[1].cpu().permute(1, 2, 3, 0), fps=30)
-        # write_video('raw_pard.mp4', video_array=raw[1].cpu().permute(1, 2, 3, 0), fps=30)
-
-        # self.model.eval()
+        for part in batch.keys():
+            batch_part_video_Dict[part] = batch[part]['video'].detach()
+            batch_part_label_Dict[part] = batch[part]['label'].detach()
 
         # pred the video frames
         with torch.no_grad():
-            head_preds = self.model(head)
-            preds = self.model(video)
+            # head_preds = self.model(head)
+            preds = self.model(batch_part_video_Dict[self.part])
 
         # when torch.size([1]), not squeeze.
         if preds.size()[0] != 1 or len(preds.size()) != 1 :
@@ -180,14 +185,14 @@ class WalkVideoClassificationLightningModule(LightningModule):
             preds_sigmoid = torch.sigmoid(preds)
 
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
-        val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
+        val_loss = F.binary_cross_entropy_with_logits(preds, batch_part_label_Dict[self.part].float())
 
         # calc the metric, function from torchmetrics
-        accuracy = self._accuracy(preds_sigmoid, label)
+        accuracy = self._accuracy(preds_sigmoid, batch_part_label_Dict[self.part])
 
-        precision = self._precision(preds_sigmoid, label)
+        precision = self._precision(preds_sigmoid, batch_part_label_Dict[self.part])
 
-        confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
+        confusion_matrix = self._confusion_matrix(preds_sigmoid, batch_part_label_Dict[self.part])
 
         # log the val loss and val acc, in step and in epoch.
         self.log_dict({'val_loss': val_loss, 'val_acc': accuracy, 'val_precision': precision}, on_step=False, on_epoch=True)
