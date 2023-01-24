@@ -83,7 +83,7 @@ def get_Path_List(data_path: str):
 
 def get_final_video_path_Dict(prefix_path_list: list):
     '''
-    get the all final video full path, in dict. 
+    get the all final video full path, store in dict. 
     the keys mean the unique data with the disease.
     the values mean in on data with disease, how many file they are, store in List.
 

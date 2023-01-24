@@ -1,3 +1,8 @@
+'''
+batch split method.
+this file define how to process the one batch video into different part.
+aspire one batch video.
+'''
 # %%
 import warnings
 
