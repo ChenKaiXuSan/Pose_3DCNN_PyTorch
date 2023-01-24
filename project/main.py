@@ -72,7 +72,7 @@ def get_parameters():
 def train(hparams):
 
     # fixme will occure bug, with deterministic = true
-    seed_everything(42, workers=True)
+    # seed_everything(42, workers=True)
 
     classification_module = WalkVideoClassificationLightningModule(hparams)
 

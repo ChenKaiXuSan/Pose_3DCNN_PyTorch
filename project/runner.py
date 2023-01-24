@@ -8,7 +8,7 @@ import subprocess
 from argparse import ArgumentParser
 
 VIDEO_LENGTH = ['1']
-VIDEO_FRAME = ['10', '30']
+VIDEO_FRAME = ['30']
 
 MAIN_FILE_PATH = '/workspace/Pose_3DCNN_PyTorch/project/main.py'
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
                 
                 if not pre_process_flag:
 
-                    version = symbol.join([data, length, frames, 'not_pre_process'])
+                    version = symbol.join([data, length, frames, part, 'not_pre_process'])
                     log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                     with open(log_path, 'w') as f:
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
                 else:
 
-                    version = symbol.join([data, length, frames])
+                    version = symbol.join([data, length, frames, part])
                     log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                     with open(log_path, 'w') as f:
@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
             else:
 
-                version = symbol.join([data, length, frames, 'not_transfor_learning'])
+                version = symbol.join([data, length, frames, part, 'not_transfor_learning'])
                 log_path = '/workspace/Pose_3DCNN_PyTorch/logs/' + symbol.join([version, model]) + '.log'
 
                 with open(log_path, 'w') as f:

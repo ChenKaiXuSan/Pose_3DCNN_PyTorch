@@ -33,12 +33,34 @@ from torch.utils.data import DataLoader
 from pytorchvideo.data.clip_sampling import ClipSampler
 from pytorchvideo.data import make_clip_sampler
 
-from pytorchvideo.data.labeled_video_dataset import LabeledVideoDataset, labeled_video_dataset
+from pytorchvideo.data.labeled_video_dataset import LabeledVideoDataset, labeled_video_dataset, LabeledVideoPaths
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
-# different part of person 
+# different part of person
 PART = ['body', 'head',]
 
 # %%
+# TODO 需要在优化代码
+torch.manual_seed(1)
+_video_random_generator = torch.Generator()
+_video_random_generator.manual_seed(1)
+
+class WalkLabeledVideoDataset(LabeledVideoDataset):
+    def __init__(self, labeled_video_paths: List[Tuple[str, Optional[dict]]], clip_sampler: ClipSampler, video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler, transform: Optional[Callable[[dict], Any]] = None, decode_audio: bool = True, decoder: str = "pyav") -> None:
+        super().__init__(labeled_video_paths, clip_sampler, video_sampler, transform, decode_audio, decoder)
+        
+        # If a RandomSampler is used we need to pass in a custom random generator that
+        # ensures all PyTorch multiprocess workers have the same random seed.
+        # self._video_random_generator = None
+        if video_sampler == torch.utils.data.RandomSampler:
+            self._video_sampler = video_sampler(
+                self._labeled_videos, generator=_video_random_generator, 
+            )
+            print(self._video_sampler.generator._cdata)
+            print(self._video_sampler.generator.initial_seed())
+        else:
+            self._video_sampler = video_sampler(self._labeled_videos)
+
 
 def WalkDataset(
     data_path: str,
@@ -46,7 +68,7 @@ def WalkDataset(
     part: str,
     clip_duration: int,
     # clip_sampler: ClipSampler,
-    # video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler,
+    video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler,
     transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
     video_path_prefix: str = "",
     decode_audio: bool = False,
@@ -68,7 +90,7 @@ def WalkDataset(
     Returns:
         LabeledVideoDataset: _description_
     '''
-    torch.manual_seed(0)
+
     labeled_video_list = []
 
     if part == 'all':
@@ -78,17 +100,30 @@ def WalkDataset(
             print("#" * 50)
             print("load path:", PATH)
             print("#" * 50)
+            # TODO 这里还能再优化一下
+            labeled_video_paths = LabeledVideoPaths.from_path(PATH)
+            labeled_video_paths.path_prefix = video_path_prefix
+            dataset = WalkLabeledVideoDataset(
+                    labeled_video_paths,
+                    make_clip_sampler("uniform", clip_duration),
+                    video_sampler,
+                    transform,
+                    decode_audio=decode_audio,
+                    decoder=decoder,
+                )
 
             labeled_video_list.append(
-                labeled_video_dataset(
-                PATH,
-                clip_sampler=make_clip_sampler("uniform", clip_duration),
-                video_sampler=torch.utils.data.RandomSampler,
-                transform=transform,
-                video_path_prefix=video_path_prefix,
-                decode_audio=decode_audio,
-                decoder=decoder
-            )
+                # labeled_video_dataset(
+                #     PATH,
+                #     clip_sampler=make_clip_sampler("uniform", clip_duration),
+                #     video_sampler=torch.utils.data.RandomSampler,
+                #     transform=transform,
+                #     video_path_prefix=video_path_prefix,
+                #     decode_audio=decode_audio,
+                #     decoder=decoder
+                # )
+                dataset
+
             )
     else:
         PATH = os.path.join(data_path, part, flag)
@@ -96,9 +131,9 @@ def WalkDataset(
         print("#" * 50)
         print("load path:", PATH)
         print("#" * 50)
-
+        # todo 这里使用本来的api，没有经过修改
         labeled_video_list.append(
-                labeled_video_dataset(
+            labeled_video_dataset(
                 PATH,
                 clip_sampler=make_clip_sampler('random', clip_duration),
                 video_sampler=torch.utils.data.RandomSampler,
@@ -107,11 +142,12 @@ def WalkDataset(
                 decode_audio=decode_audio,
                 decoder=decoder
             )
-            )
+        )
 
     return labeled_video_list
 
 # %%
+
 
 class WalkDataModule(LightningDataModule):
     def __init__(self, opt):
@@ -140,7 +176,7 @@ class WalkDataModule(LightningDataModule):
                         [
                             # uniform clip T frames from the given n sec video.
                             UniformTemporalSubsample(self.uniform_temporal_subsample_num),
-                            
+
                             # dived the pixel from [0, 255] tp [0, 1], to save computing resources.
                             Div255(),
                             Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
@@ -166,7 +202,7 @@ class WalkDataModule(LightningDataModule):
                         [
                             # uniform clip T frames from the given n sec video.
                             UniformTemporalSubsample(self.uniform_temporal_subsample_num),
-                            
+
                             # dived the pixel from [0, 255] to [0, 1], to save computing resources.
                             Div255(),
                             Normalize((0.45, 0.45, 0.45), (0.225, 0.225, 0.225)),
@@ -259,7 +295,7 @@ class WalkDataModule(LightningDataModule):
         in directory and subdirectory. Add transform that subsamples and
         normalizes the video before applying the scale, crop and flip augmentations.
         '''
-        
+
         pose_Dict = {}
 
         if self._PART != 'all':
@@ -296,12 +332,12 @@ class WalkDataModule(LightningDataModule):
 
         for i, p in enumerate(_PART):
             pose_Dict[p] = DataLoader(
-            self.val_dataset[i],
-            batch_size=self._BATCH_SIZE,
-            num_workers=self._NUM_WORKERS,
-            pin_memory=True,
-            drop_last=True
-        )   
+                self.val_dataset[i],
+                batch_size=self._BATCH_SIZE,
+                num_workers=self._NUM_WORKERS,
+                pin_memory=True,
+                drop_last=True
+            )
 
         combined_loaders = CombinedLoader(pose_Dict, mode='min_size')
 
