@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np 
 from pytorch_lightning import LightningModule
 
-from make_model import MakeVideoModule
+from make_model import MakeVideoModule, MakeMultipartVideoModule
 from utils.metrics import *
 
 # for metrics
@@ -40,29 +40,34 @@ class WalkVideoClassificationLightningModule(LightningModule):
 
         self.model = MakeVideoModule(hparams)
 
-        # select the network structure 
-        if self.model_type == 'resnet':
-            self.model=self.model.make_walk_resnet()
+        if self.part == 'all':
+            self.multipart_model = MakeMultipartVideoModule(hparams)
 
-        elif self.model_type == 'r2plus1d':
-            self.model = self.model.make_walk_r2plus1d()
+        else:
 
-        elif self.model_type == 'csn':
-            self.model=self.model.make_walk_csn()
+            # select the network structure 
+            if self.model_type == 'resnet':
+                self.model=self.model.make_walk_resnet()
 
-        elif self.model_type == 'x3d':
-            self.model = self.model.make_walk_x3d()
+            elif self.model_type == 'r2plus1d':
+                self.model = self.model.make_walk_r2plus1d()
 
-        elif self.model_type == 'slowfast':
-            self.model = self.model.make_walk_slow_fast()
+            elif self.model_type == 'csn':
+                self.model=self.model.make_walk_csn()
 
-        elif self.model_type == 'i3d':
-            self.model = self.model.make_walk_i3d()
+            elif self.model_type == 'x3d':
+                self.model = self.model.make_walk_x3d()
 
-        elif self.model_type == 'c2d':
-            self.model = self.model.make_walk_c2d()
+            elif self.model_type == 'slowfast':
+                self.model = self.model.make_walk_slow_fast()
 
-        self.transfor_learning = hparams.transfor_learning
+            elif self.model_type == 'i3d':
+                self.model = self.model.make_walk_i3d()
+
+            elif self.model_type == 'c2d':
+                self.model = self.model.make_walk_c2d()
+
+            self.transfor_learning = hparams.transfor_learning
 
         # save the hyperparameters to the file and ckpt
         self.save_hyperparameters()
@@ -96,23 +101,20 @@ class WalkVideoClassificationLightningModule(LightningModule):
         batch_part_video_Dict = {}
         batch_part_label_Dict = {}
 
-        # for part in batch.keys():
-        #     for b in range(batch[part]['video'].size()[0]):
-        #         write_video('test/train/' +str(b)+part+batch[part]['video_name'][b], batch[part]['video'][b].permute(1, 2, 3, 0).cpu(), fps=30)
-        
         # input and label
         for part in batch.keys():
             batch_part_video_Dict[part] = batch[part]['video'].detach()
             batch_part_label_Dict[part] = batch[part]['label'].detach()
 
-        # fake code
-        # batch_part_video_Dict['body'] = batch[0]['video'].detach()
-        # batch_part_label_Dict['body'] = batch[0]['label'].detach()
         # todo all code need write
         if self.part == 'all':
-            self.part = 'body'
-        # classification task
-        y_hat = self.model(batch_part_video_Dict[self.part])
+            
+            y_hat = self.multipart_model(batch_part_video_Dict)
+            label = batch_part_label_Dict['body']
+
+        else:
+            y_hat = self.model(batch_part_video_Dict[self.part])
+            label = batch_part_label_Dict[self.part]
 
         # when torch.size([1]), not squeeze.
         if y_hat.size()[0] != 1 or len(y_hat.size()) != 1 :
@@ -123,11 +125,10 @@ class WalkVideoClassificationLightningModule(LightningModule):
         else:
             y_hat_sigmoid = torch.sigmoid(y_hat)
 
-        loss = F.binary_cross_entropy_with_logits(y_hat, batch_part_label_Dict[self.part].float())
-        # soft_margin_loss = F.soft_margin_loss(y_hat_sigmoid, label.float())
+        loss = F.binary_cross_entropy_with_logits(y_hat, label.float())
 
-        accuracy = self._accuracy(y_hat_sigmoid, batch_part_label_Dict[self.part])
-        precision = self._precision(y_hat_sigmoid, batch_part_label_Dict[self.part])
+        accuracy = self._accuracy(y_hat_sigmoid, label)
+        precision = self._precision(y_hat_sigmoid, label)
 
         self.log_dict({'train_loss': loss, 'train_acc': accuracy, 'train_precision': precision})
 
@@ -160,22 +161,23 @@ class WalkVideoClassificationLightningModule(LightningModule):
         batch_part_video_Dict = {}
         batch_part_label_Dict = {}
 
-        # todo 能成功load进来多个数据集，但是不能shuffle。
-        # todo 应该找个方法，尝试一下看看能不能shuffle数据集
-        if self.part == 'all':
-            self.part = 'body'
-        # for part in batch.keys():
-        #     for b in range(batch[part]['video'].size()[0]):
-        #         write_video('test/val/' +str(b)+part+batch[part]['video_name'][b], batch[part]['video'][b].permute(1, 2, 3, 0).cpu(), fps=30)
-
         for part in batch.keys():
             batch_part_video_Dict[part] = batch[part]['video'].detach()
             batch_part_label_Dict[part] = batch[part]['label'].detach()
 
-        # pred the video frames
-        with torch.no_grad():
-            # head_preds = self.model(head)
-            preds = self.model(batch_part_video_Dict[self.part])
+        if self.part == 'all':
+            with torch.no_grad():
+                preds = self.multipart_model(batch_part_video_Dict)
+
+            label = batch_part_label_Dict['body']
+
+        else:
+            # pred the video frames
+            with torch.no_grad():
+                preds = self.model(batch_part_video_Dict[self.part])
+
+            label = batch_part_label_Dict[self.part]
+                
 
         # when torch.size([1]), not squeeze.
         if preds.size()[0] != 1 or len(preds.size()) != 1 :
@@ -185,14 +187,14 @@ class WalkVideoClassificationLightningModule(LightningModule):
             preds_sigmoid = torch.sigmoid(preds)
 
         # squeeze(dim=-1) to keep the torch.Size([1]), not null.
-        val_loss = F.binary_cross_entropy_with_logits(preds, batch_part_label_Dict[self.part].float())
+        val_loss = F.binary_cross_entropy_with_logits(preds, label.float())
 
         # calc the metric, function from torchmetrics
-        accuracy = self._accuracy(preds_sigmoid, batch_part_label_Dict[self.part])
+        accuracy = self._accuracy(preds_sigmoid, label)
 
-        precision = self._precision(preds_sigmoid, batch_part_label_Dict[self.part])
+        precision = self._precision(preds_sigmoid, label)
 
-        confusion_matrix = self._confusion_matrix(preds_sigmoid, batch_part_label_Dict[self.part])
+        confusion_matrix = self._confusion_matrix(preds_sigmoid, label)
 
         # log the val loss and val acc, in step and in epoch.
         self.log_dict({'val_loss': val_loss, 'val_acc': accuracy, 'val_precision': precision}, on_step=False, on_epoch=True)

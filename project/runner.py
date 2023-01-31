@@ -8,7 +8,7 @@ import subprocess
 from argparse import ArgumentParser
 
 VIDEO_LENGTH = ['1']
-VIDEO_FRAME = ['30']
+VIDEO_FRAME = ['10', '30']
 
 MAIN_FILE_PATH = '/workspace/Pose_3DCNN_PyTorch/project/main.py'
 
