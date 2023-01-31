@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import copy
 
-
 # %%
 
 class MakeVideoModule(nn.Module):
@@ -23,6 +22,7 @@ class MakeVideoModule(nn.Module):
         self.model_class_num = hparams.model_class_num
         self.model_depth = hparams.model_depth
 
+        self.part = hparams.part
         self.transfor_learning = hparams.transfor_learning
 
     def set_parameter_requires_grad(self, model: torch.nn.Module, flag:bool = True):
@@ -147,28 +147,49 @@ class MakeVideoModule(nn.Module):
 
         return slow
 
-# # %%
-# class opt: 
+class MakeMultipartVideoModule(nn.Module):
 
-#     model_class_num = 1
-#     model_depth = 50
-#     transfor_learning = True
-#     fix_layer = 'stage_head'
+    def __init__(self, hparams) -> None:
 
-# make_video_module = MakeVideoModule(opt)
+        super().__init__()
 
-# model = make_video_module.make_walk_i3d()
+        self.model_class_num = hparams.model_class_num
+        self.model_depth = hparams.model_depth
 
-# from torchinfo import summary
+        self.part = hparams.part
+        self.transfor_learning = hparams.transfor_learning
 
-# summary(model, input_size=(4, 3, 16, 224, 224))
-# # %%
+    def make_multipart_resnet(self):
 
-# single_frame_model = single_frame(opt)
+        # make model
+        if self.transfor_learning:
+            slow = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
+            
+            # change the knetics-400 output 400 to model class num
+            slow.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
 
-# batch_video = torch.randn(size=[4, 3, 16, 224, 224])
+        else:
+            slow = resnet.create_resnet(
+                input_channel=3,
+                model_depth=self.model_depth,
+                model_num_class=self.model_class_num,
+                norm=nn.BatchNorm3d,
+                activation=nn.ReLU,
+            )
 
-# output = single_frame_model(batch_video)
+        return slow
+
+    def forward(self, head, upper, lower, body):
+
+        head_net = self.make_multipart_resnet()
+        upper_net = self.make_multipart_resnet()
+        lower_net = self.make_multipart_resnet()
+        body_net = self.make_multipart_resnet()
+
+        # need fusion the last feature for the final classification results
+        # todo how to write this code.
+        
+
 
 # %%
 # list the model in repo.

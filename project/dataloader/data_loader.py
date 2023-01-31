@@ -1,5 +1,10 @@
 '''
-a pytorch lightning data module based dataloader, for train/val/test dataset prepare.
+A pytorch lightning data module based dataloader, for train/val/test dataset prepare.
+rewrite the WalkLabeledVideoDataset class, where from pytorchvideo.
+make sure use same torch.Generator() to get the same order when load four fidderent dataset.
+
+Note that, based pose method, we can't use more data augument technology such as rotation, translation, clipping.
+Because of we need to ensure the correct locate of different part for splitted part.
 
 '''
 
@@ -37,13 +42,11 @@ from pytorchvideo.data.labeled_video_dataset import LabeledVideoDataset, labeled
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 # different part of person
-PART = ['body', 'head',]
+PART = ['body', 'head', 'upper', 'lower']
 
 # %%
-# TODO 需要在优化代码
-torch.manual_seed(1)
-_video_random_generator = torch.Generator()
-_video_random_generator.manual_seed(1)
+# make sure different dataset use same generator.
+VIDEO_RANDOM_GENERATOR = torch.Generator()
 
 class WalkLabeledVideoDataset(LabeledVideoDataset):
     def __init__(self, labeled_video_paths: List[Tuple[str, Optional[dict]]], clip_sampler: ClipSampler, video_sampler: Type[torch.utils.data.Sampler] = torch.utils.data.RandomSampler, transform: Optional[Callable[[dict], Any]] = None, decode_audio: bool = True, decoder: str = "pyav") -> None:
@@ -54,10 +57,8 @@ class WalkLabeledVideoDataset(LabeledVideoDataset):
         # self._video_random_generator = None
         if video_sampler == torch.utils.data.RandomSampler:
             self._video_sampler = video_sampler(
-                self._labeled_videos, generator=_video_random_generator, 
+                self._labeled_videos, generator=VIDEO_RANDOM_GENERATOR, 
             )
-            print(self._video_sampler.generator._cdata)
-            print(self._video_sampler.generator.initial_seed())
         else:
             self._video_sampler = video_sampler(self._labeled_videos)
 
@@ -100,7 +101,7 @@ def WalkDataset(
             print("#" * 50)
             print("load path:", PATH)
             print("#" * 50)
-            # TODO 这里还能再优化一下
+
             labeled_video_paths = LabeledVideoPaths.from_path(PATH)
             labeled_video_paths.path_prefix = video_path_prefix
             dataset = WalkLabeledVideoDataset(
@@ -113,30 +114,22 @@ def WalkDataset(
                 )
 
             labeled_video_list.append(
-                # labeled_video_dataset(
-                #     PATH,
-                #     clip_sampler=make_clip_sampler("uniform", clip_duration),
-                #     video_sampler=torch.utils.data.RandomSampler,
-                #     transform=transform,
-                #     video_path_prefix=video_path_prefix,
-                #     decode_audio=decode_audio,
-                #     decoder=decoder
-                # )
                 dataset
-
             )
+
     else:
+
         PATH = os.path.join(data_path, part, flag)
 
         print("#" * 50)
         print("load path:", PATH)
         print("#" * 50)
-        # todo 这里使用本来的api，没有经过修改
+
         labeled_video_list.append(
             labeled_video_dataset(
                 PATH,
-                clip_sampler=make_clip_sampler('random', clip_duration),
-                video_sampler=torch.utils.data.RandomSampler,
+                make_clip_sampler('random', clip_duration),
+                video_sampler,
                 transform=transform,
                 video_path_prefix=video_path_prefix,
                 decode_audio=decode_audio,
