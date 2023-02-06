@@ -1,6 +1,7 @@
 # %%
 from pytorchvideo.models import resnet, csn, r2plus1d, x3d, slowfast
 from pytorchvideo.models.head import create_res_basic_head
+from pytorchvideo.models.resnet import create_bottleneck_block, create_res_block
 from pytorchvideo.models.net import Net
 
 import torch
@@ -177,7 +178,6 @@ class MakeMultipartVideoModule(nn.Module):
 
             # not need the last avgpool and linear, because we fuse different feature in.
             # the module store in nn.ModuleList structure, so can use slice to do it.
-            # todo if slice, lost the forward function.
             slow = Net(blocks = slow.blocks[:-1])
 
         else:
@@ -196,23 +196,36 @@ class MakeMultipartVideoModule(nn.Module):
         return slow
 
     def make_fusion_head(self):
+        
+        head_list = []
 
         # transfor learning
         if self.transfor_learning:
+            
+            stage = create_bottleneck_block(
+                dim_in=4*2048,
+                dim_inner=2*2048,
+                dim_out=2048,
+            )
+
+            head_list.append(stage)
 
             slow = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
 
             # change the knetics-400 output 400 to model class num
-            slow.blocks[-1].proj = nn.Linear(4 * 2048, self.model_class_num)
+            slow.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
             head = slow.blocks[-1]
+            head.pool = torch.nn.AvgPool3d(kernel_size=(5, 4, 4), stride=(1,1,1), padding=(0,0,0))
+            head_list.append(head)
 
+            return Net(blocks=nn.ModuleList(head_list))
         else:
             head = create_res_basic_head(
                 in_features=4 * 2048,
                 out_features=self.model_class_num,
             )
 
-        return head
+            return head
 
     def forward(self, part_Dict: dict):
 
@@ -229,10 +242,6 @@ class MakeMultipartVideoModule(nn.Module):
         output = self.multipart_head(torch.cat((head_output, upper_output, lower_output, body_output), dim=1))
 
         return output
-
-        # need fusion the last feature for the final classification results
-        # todo how to write this code.
-
 
 # %%
 # list the model in repo.

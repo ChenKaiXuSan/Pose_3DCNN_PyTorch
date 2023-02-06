@@ -38,12 +38,13 @@ class WalkVideoClassificationLightningModule(LightningModule):
         # body part 
         self.part = hparams.part
 
-        self.model = MakeVideoModule(hparams)
 
         if self.part == 'all':
             self.multipart_model = MakeMultipartVideoModule(hparams)
 
         else:
+
+            self.model = MakeVideoModule(hparams)
 
             # select the network structure 
             if self.model_type == 'resnet':
@@ -66,8 +67,6 @@ class WalkVideoClassificationLightningModule(LightningModule):
 
             elif self.model_type == 'c2d':
                 self.model = self.model.make_walk_c2d()
-
-            self.transfor_learning = hparams.transfor_learning
 
         # save the hyperparameters to the file and ckpt
         self.save_hyperparameters()
