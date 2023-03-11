@@ -34,13 +34,14 @@ def get_parameters():
 
     # Training setting
     parser.add_argument('--max_epochs', type=int, default=50, help='numer of epochs of training')
-    parser.add_argument('--batch_size', type=int, default=4, help='batch size for the dataloader')
+    parser.add_argument('--batch_size', type=int, default=8, help='batch size for the dataloader')
     parser.add_argument('--num_workers', type=int, default=2, help='dataloader for load video')
     parser.add_argument('--clip_duration', type=int, default=1, help='clip duration for the video')
     parser.add_argument('--uniform_temporal_subsample_num', type=int,
                         default=10, help='num frame from the clip duration')
     parser.add_argument('--gpu_num', type=int, default=0, choices=[0, 1], help='the gpu number whicht to train')
     parser.add_argument('--part', type=str, default='all', choices=['all', 'body', 'head', 'upper', 'lower'], help='which part to used.')
+    parser.add_argument('--fuse_flag', type=str, default='conv', choices=['sum', 'max', 'concat', 'conv'], help='how to fuse the different feature when part is all.')
 
     # ablation experment 
     # pre process flag
@@ -56,7 +57,7 @@ def get_parameters():
     # Path
     parser.add_argument('--data_path', type=str, default="/workspace/data/dataset/", help='meta dataset path')
     parser.add_argument('--pose_data_path', type=str,
-                        default="/workspace/data/Pose_dataset_512", help="pose based dataset, split person to four different part. [body, head, upper, lower]")
+                        default="/workspace/data/new_Pose_dataset_512", help="pose based dataset, split person to four different part. [body, head, upper, lower]")
     parser.add_argument('--split_pad_data_path', type=str, default="/workspace/data/split_pad_dataset_512/",
                         help="split and pad dataset with detection method.")
 
