@@ -201,7 +201,7 @@ if __name__ == '__main__':
     IMG_SIZE = parames.img_size
 
     # make folder with img size
-    MAKED_DATA_PATH = "/workspace/data/Pose_dataset_" + str(IMG_SIZE)
+    MAKED_DATA_PATH = "/workspace/data/new_Pose_dataset_" + str(IMG_SIZE)
     make_different_part_folder(MAKED_DATA_PATH)
 
     # instance pose class.

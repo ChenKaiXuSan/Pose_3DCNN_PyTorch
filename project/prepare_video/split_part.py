@@ -102,10 +102,23 @@ class BatchSplit():
             )
         )
 
+        head_height = int(shoulder_center_point[1] * height)
+
         head_img = crop(image.permute(2, 0, 1),
-                        top=0, left=int(
-                        ear_center_point[0] * width - bias),
-                        height=int(shoulder_center_point[1] * height), width=int(shoulder_center_point[1] * height))
+                        top=0, 
+                        left=int(ear_center_point[0] * width - bias),
+                        height=head_height, 
+                        width=head_height
+                        )
+
+        # head_img = crop(
+        #     image.permute(2, 0, 1),
+        #     top=0,
+        #     left=int(width-head_height-bias) // 2,
+        #     height=head_height,
+        #     width=head_height,
+        # )
+        
         head_img = resize(head_img, [self.img_size, self.img_size])
 
         return head_img
@@ -114,7 +127,7 @@ class BatchSplit():
         self,
         image: torch.Tensor,
         keypoint,
-        bias=60
+        bias=80
     ):
 
         width, height, c = image.shape
@@ -132,16 +145,16 @@ class BatchSplit():
             (keypoint[mp_pose.PoseLandmark.RIGHT_HIP].x,
              keypoint[mp_pose.PoseLandmark.RIGHT_HIP].y)
         )
-        body_height = abs(hip_center_point[1] - shoulder_center_point[1]) * height
 
-        if body_height > 1:
+        upper_height = abs(hip_center_point[1] - shoulder_center_point[1]) * height
+
+        if upper_height > 1:
 
             body_img = crop(image.permute(2, 0, 1),
                             top=int(shoulder_center_point[1] * height),
-                            left=int(shoulder_center_point[0] * width - bias),
-                            height=int(body_height+bias), width=int(body_height+bias))
-
-            # pad_body_img = pad(body_img, padding=(0, int(bias/2)), fill=0)
+                            # left=int(shoulder_center_point[0] * width - bias),
+                            left=int(width-upper_height-bias) //2,
+                            height=int(upper_height+bias), width=int(upper_height+bias))
 
             body_img = resize(body_img, [self.img_size, self.img_size])
 
@@ -170,7 +183,8 @@ class BatchSplit():
                 
             lower_img = crop(image.permute(2, 0, 1),
                             top=int(hip_center_point[1] * height),
-                            left=int(hip_center_point[0] * width - 60),
+                            # left=int(hip_center_point[0] * width - 60),
+                            left=int(width-lower_height) // 2,
                             height=int(lower_height), width=int(lower_height))
             lower_img = resize(lower_img, [self.img_size, self.img_size])
 
