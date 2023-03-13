@@ -34,7 +34,7 @@ def get_parameters():
 
     # Training setting
     parser.add_argument('--max_epochs', type=int, default=50, help='numer of epochs of training')
-    parser.add_argument('--batch_size', type=int, default=8, help='batch size for the dataloader')
+    parser.add_argument('--batch_size', type=int, default=4, help='batch size for the dataloader')
     parser.add_argument('--num_workers', type=int, default=2, help='dataloader for load video')
     parser.add_argument('--clip_duration', type=int, default=1, help='clip duration for the video')
     parser.add_argument('--uniform_temporal_subsample_num', type=int,

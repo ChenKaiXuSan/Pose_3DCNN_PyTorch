@@ -230,7 +230,7 @@ class FuseHead(nn.Module):
 
         self.head = self.fuse_head()
 
-    def fuse_head(self,):
+    def fuse_head(self):
         # todo 比较一下不同的fusion方法？
         # todo 但是之前应该先优化一下裁剪位置的代码。
         head_list = []
@@ -304,7 +304,7 @@ class FuseHead(nn.Module):
         elif self.fuse_flag == 'sum':
             feat = head + upper + lower + body
 
-        return self.fuse_head(feat)
+        return self.head(feat)
 
 
 # %%
