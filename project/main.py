@@ -26,7 +26,7 @@ def get_parameters():
     parser = ArgumentParser()
 
     # model hyper-parameters
-    parser.add_argument('--model', type=str, default='resnet', choices=['resnet', 'csn', 'r2plus1d', 'x3d', 'slowfast', 'c2d', 'i3d'])
+    parser.add_argument('--model', type=str, default='resnet', choices=['resnet', 'csn', 'r2plus1d', 'x3d_l', 'slowfast', 'c2d', 'i3d'])
     parser.add_argument('--img_size', type=int, default=224)
     parser.add_argument('--version', type=str, default='test', help='the version of logger, such data')
     parser.add_argument('--model_class_num', type=int, default=1, help='the class num of model')
@@ -34,13 +34,13 @@ def get_parameters():
 
     # Training setting
     parser.add_argument('--max_epochs', type=int, default=50, help='numer of epochs of training')
-    parser.add_argument('--batch_size', type=int, default=4, help='batch size for the dataloader')
+    parser.add_argument('--batch_size', type=int, default=3, help='batch size for the dataloader')
     parser.add_argument('--num_workers', type=int, default=2, help='dataloader for load video')
     parser.add_argument('--clip_duration', type=int, default=1, help='clip duration for the video')
     parser.add_argument('--uniform_temporal_subsample_num', type=int,
                         default=10, help='num frame from the clip duration')
     parser.add_argument('--gpu_num', type=int, default=0, choices=[0, 1], help='the gpu number whicht to train')
-    parser.add_argument('--part', type=str, default='all', choices=['all', 'body', 'head', 'upper', 'lower'], help='which part to used.')
+    parser.add_argument('--part', type=str, default='all', choices=['all', 'all_loss', 'body', 'head', 'upper', 'lower'], help='which part to used.')
     parser.add_argument('--fuse_flag', type=str, default='conv', choices=['sum', 'max', 'concat', 'conv'], help='how to fuse the different feature when part is all.')
 
     # ablation experment 
@@ -90,12 +90,12 @@ def train(hparams):
 
     # define the checkpoint becavier.
     model_check_point = ModelCheckpoint(
-        filename='{epoch}-{val_loss:.2f}-{val_acc:.4f}',
+        filename='{epoch}-{val_loss:.2f}-{val_acc:.4f}-{val_f1_score:.4f}-{val_auroc:.4f}-{val_cohen_kappa:.4f}',
         auto_insert_metric_name=True,
         monitor="val_acc",
         mode="max",
         save_last=True,
-        save_top_k=5,
+        save_top_k=3,
 
     )
 

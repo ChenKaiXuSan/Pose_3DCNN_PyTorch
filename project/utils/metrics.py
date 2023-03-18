@@ -57,7 +57,7 @@ def get_AUC():
 
 
 def get_F1Score():
-    F1_Score = torchmetrics.F1Score(
+    F1_Score = torchmetrics.classification.B(
         num_classes=2,
 
     )

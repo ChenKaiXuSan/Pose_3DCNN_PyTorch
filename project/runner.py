@@ -7,8 +7,8 @@ import time
 import subprocess
 from argparse import ArgumentParser
 
-VIDEO_LENGTH = ['1']
-VIDEO_FRAME = ['10', '30']
+VIDEO_LENGTH = ['1', '2']
+VIDEO_FRAME = ['16']
 
 MAIN_FILE_PATH = '/workspace/Pose_3DCNN_PyTorch/project/main.py'
 
@@ -19,7 +19,7 @@ def get_parameters():
     parser = ArgumentParser()
 
     # model hyper-parameters
-    parser.add_argument('--model', type=str, default='resnet', choices=['resnet', 'csn', 'r2plus1d', 'x3d', 'slowfast', 'c2d', 'i3d'])
+    parser.add_argument('--model', type=str, default='x3d_l', choices=['resnet', 'x3d_l'])
     parser.add_argument('--model_depth', type=int, default=50, choices=[50, 101, 152], help='the depth of used model')
 
     # Training setting
@@ -48,6 +48,11 @@ if __name__ == '__main__':
     model = config.model
     part = config.part
 
+    if part != 'all':
+        img_size = 312
+    else:
+        img_size = 224
+
     symbol = '_'
 
     for length in VIDEO_LENGTH:
@@ -75,6 +80,7 @@ if __name__ == '__main__':
                                         '--gpu_num', str(config.gpu_num),
                                         # '--pre_process_flag',
                                         '--transfor_learning',
+                                        '--img_size', str(img_size),
                                         ], stdout=f, stderr=f)
 
                 else:
@@ -95,6 +101,7 @@ if __name__ == '__main__':
                                         '--fuse_flag', str(config.fuse_flag),
                                         '--pre_process_flag',
                                         '--transfor_learning',
+                                        '--img_size', str(img_size),
                                         ], stdout=f, stderr=f)
 
             else:
@@ -116,6 +123,7 @@ if __name__ == '__main__':
                                     '--pre_process_flag',
                                     '--max_epochs', '100'
                                     # '--transfor_learning',
+                                    '--img_size', str(img_size),
                                     ], stdout=f, stderr=f)
 
             print('finish %s' % log_path)
