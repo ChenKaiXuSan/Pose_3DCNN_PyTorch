@@ -179,32 +179,25 @@ class MakeMultipartVideoModule(MakeVideoModule):
 
     def fuse_head(self):
         # todo 比较一下不同的fusion方法？
-        head_list = []
-        slow = torch.hub.load('facebookresearch/pytorchvideo', 'slow_r50', pretrained=True)
-        x3d_l = torch.hub.load("facebookresearch/pytorchvideo:main", model='x3d_l', pretrained=True)
 
         if self.fuse_flag == 'concat':
-            slow.blocks[-1].proj = nn.Linear(2048 * 4, self.model_class_num)
-            head = slow.blocks[-1]
-            head_list.append(head)
+
+            head = MLP(
+            in_channels=4*192,
+            hidden_channels=(384, 192, 96, self.model_class_num),
+            norm_layer=nn.BatchNorm2d,
+            dropout=0.5
+            )
 
         elif self.fuse_flag in ['sum', 'max']:
-            # todo MLP?
-            # slow.blocks[-1].proj = nn.Linear(2048, self.model_class_num)
-            head = slow.blocks[-1]
-
-            head_list.append(head.pool)
-
-            head_list.append(
-                MLP(
-                    in_channels=2048,
-                    hidden_channels=(1024*3, 512, 256, self.model_class_num),
-                    norm_layer=nn.BatchNorm2d,
-                    dropout=0.5
-                ))
-
-            head_list.append(
-                nn.AdaptiveAvgPool3d(output_size=self.model_class_num)
+            
+            head = create_x3d_head(
+                dim_in= 192,
+                dim_inner= 432,
+                dim_out=864,
+                # pool_kernel_size=(16, 10, 10),
+                activation=None,
+                num_classes= self.model_class_num
             )
 
         elif self.fuse_flag == 'conv':
@@ -219,24 +212,15 @@ class MakeMultipartVideoModule(MakeVideoModule):
 
             )
 
-            return head
-            # head_list.append(
-            #     MLP(
-            #     in_channels=768,
-            #     hidden_channels=[384, 192, 96, self.model_class_num],
-            #     norm_layer=nn.BatchNorm2d,
-            #     dropout=0.5
-            #     )
-            # )
-
         else:
 
-            head_list = create_res_basic_head(
+            head = create_res_basic_head(
                 in_features=4 * 2048,
                 out_features=self.model_class_num,
             )
 
-        return Net(blocks=nn.ModuleList(head_list))
+        # FIXME have err because the nn.modulelist 
+        return Net(blocks=head)
 
     def forward(self, part_Dict: dict):
 
