@@ -7,7 +7,7 @@ import time
 import subprocess
 from argparse import ArgumentParser
 
-VIDEO_LENGTH = ['1', '2']
+VIDEO_LENGTH = ['1']
 VIDEO_FRAME = ['16']
 
 MAIN_FILE_PATH = '/workspace/Pose_3DCNN_PyTorch/project/main.py'

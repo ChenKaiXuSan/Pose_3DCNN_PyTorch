@@ -180,6 +180,8 @@ class MakeMultipartVideoModule(MakeVideoModule):
     def fuse_head(self):
         # todo 比较一下不同的fusion方法？
 
+        head_list = []
+
         if self.fuse_flag == 'concat':
 
             head = MLP(
@@ -211,6 +213,7 @@ class MakeMultipartVideoModule(MakeVideoModule):
                 num_classes= self.model_class_num
 
             )
+            head_list.append(head)
 
         else:
 
@@ -220,7 +223,7 @@ class MakeMultipartVideoModule(MakeVideoModule):
             )
 
         # FIXME have err because the nn.modulelist 
-        return Net(blocks=head)
+        return Net(blocks=nn.ModuleList(head_list))
 
     def forward(self, part_Dict: dict):
 
